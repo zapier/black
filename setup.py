@@ -47,10 +47,7 @@ else:
 
 setup(
     name="black",
-    use_scm_version={
-        "write_to": "src/_black_version.py",
-        "write_to_template": 'version = "{version}"\n',
-    },
+    version='20.8b1.post1',
     description="The uncompromising code formatter.",
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
@@ -60,7 +57,6 @@ setup(
     url="https://github.com/psf/black",
     project_urls={"Changelog": "https://github.com/psf/black/blob/master/CHANGES.md"},
     license="MIT",
-    py_modules=["_black_version"],
     ext_modules=ext_modules,
     packages=["blackd", "black", "blib2to3", "blib2to3.pgen2", "black_primer"],
     package_dir={"": "src"},
