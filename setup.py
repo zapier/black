@@ -17,10 +17,7 @@ def get_long_description() -> str:
 
 setup(
     name="black",
-    use_scm_version={
-        "write_to": "_black_version.py",
-        "write_to_template": 'version = "{version}"\n',
-    },
+    version='19.10b0.post1',
     description="The uncompromising code formatter.",
     long_description=get_long_description(),
     long_description_content_type="text/markdown",
@@ -29,7 +26,7 @@ setup(
     author_email="lukasz@langa.pl",
     url="https://github.com/psf/black",
     license="MIT",
-    py_modules=["black", "blackd", "_black_version"],
+    py_modules=["black", "blackd"],
     packages=["blib2to3", "blib2to3.pgen2"],
     package_data={"blib2to3": ["*.txt"]},
     python_requires=">=3.6",

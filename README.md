@@ -81,6 +81,8 @@ Options:
                                   piping source on standard input).
   -S, --skip-string-normalization
                                   Don't normalize string quotes or prefixes.
+  --single-quote                  Use single quotes instead of double quotes in
+                                  strings except for triple-quoted strings.
   --check                         Don't write the files back, just return the
                                   status.  Return code 0 means nothing would
                                   change.  Return code 1 means some files
@@ -351,6 +353,9 @@ docstring standard described in
 string in double quotes (`""`) is impossible to confuse with a one double-quote
 regardless of fonts and syntax highlighting used. On top of this, double quotes for
 strings are consistent with C which Python interacts a lot with.
+
+> While we strongly recommend double quotes, we also provide a
+> `--single-quote` option if you prefer.
 
 On certain keyboard layouts like US English, typing single quotes is a bit easier than
 double quotes. The latter requires use of the Shift key. My recommendation here is to
