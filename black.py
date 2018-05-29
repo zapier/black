@@ -47,7 +47,7 @@ from blib2to3.pgen2 import driver, token
 from blib2to3.pgen2.parse import ParseError
 
 
-__version__ = "18.9b0"
+__version__ = "18.9b0.post1"
 DEFAULT_LINE_LENGTH = 88
 DEFAULT_EXCLUDES = (
     r"/(\.git|\.hg|\.mypy_cache|\.nox|\.tox|\.venv|_build|buck-out|build|dist)/"
@@ -116,6 +116,7 @@ class FileMode(Flag):
     PYI = 2
     NO_STRING_NORMALIZATION = 4
     NO_NUMERIC_UNDERSCORE_NORMALIZATION = 8
+    SINGLE_QUOTE = 16
 
     @classmethod
     def from_configuration(
@@ -125,6 +126,7 @@ class FileMode(Flag):
         pyi: bool,
         skip_string_normalization: bool,
         skip_numeric_underscore_normalization: bool,
+        single_quote: bool,
     ) -> "FileMode":
         mode = cls.AUTO_DETECT
         if py36:
@@ -135,6 +137,8 @@ class FileMode(Flag):
             mode |= cls.NO_STRING_NORMALIZATION
         if skip_numeric_underscore_normalization:
             mode |= cls.NO_NUMERIC_UNDERSCORE_NORMALIZATION
+        if single_quote:
+            mode |= cls.SINGLE_QUOTE
         return mode
 
 
@@ -209,6 +213,11 @@ def read_pyproject_toml(
     "--skip-numeric-underscore-normalization",
     is_flag=True,
     help="Don't normalize underscores in numeric literals.",
+)
+@click.option(
+    "--single-quote",
+    is_flag=True,
+    help="Use single quotes instead of double quotes in strings.",
 )
 @click.option(
     "--check",
@@ -301,6 +310,7 @@ def main(
     py36: bool,
     skip_string_normalization: bool,
     skip_numeric_underscore_normalization: bool,
+    single_quote: bool,
     quiet: bool,
     verbose: bool,
     include: str,
@@ -315,6 +325,7 @@ def main(
         pyi=pyi,
         skip_string_normalization=skip_string_normalization,
         skip_numeric_underscore_normalization=skip_numeric_underscore_normalization,
+        single_quote=single_quote,
     )
     if config and verbose:
         out(f"Using configuration from {config}.", bold=False, fg="blue")
@@ -631,6 +642,7 @@ def format_str(
     is_pyi = bool(mode & FileMode.PYI)
     py36 = bool(mode & FileMode.PYTHON36) or is_python36(src_node)
     normalize_strings = not bool(mode & FileMode.NO_STRING_NORMALIZATION)
+    single_quote = bool(mode & FileMode.SINGLE_QUOTE)
     normalize_fmt_off(src_node)
     lines = LineGenerator(
         remove_u_prefix=py36 or "unicode_literals" in future_imports,
@@ -638,6 +650,7 @@ def format_str(
         normalize_strings=normalize_strings,
         allow_underscores=py36
         and not bool(mode & FileMode.NO_NUMERIC_UNDERSCORE_NORMALIZATION),
+        single_quote=single_quote,
     )
     elt = EmptyLineTracker(is_pyi=is_pyi)
     empty_line = Line()
@@ -1431,6 +1444,7 @@ class LineGenerator(Visitor[Line]):
 
     is_pyi: bool = False
     normalize_strings: bool = True
+    single_quote: bool = False
     current_line: Line = Factory(Line)
     remove_u_prefix: bool = False
     allow_underscores: bool = False
@@ -1474,7 +1488,7 @@ class LineGenerator(Visitor[Line]):
             normalize_prefix(node, inside_brackets=any_open_brackets)
             if self.normalize_strings and node.type == token.STRING:
                 normalize_string_prefix(node, remove_u_prefix=self.remove_u_prefix)
-                normalize_string_quotes(node)
+                normalize_string_quotes(node, single_quote=self.single_quote)
             if node.type == token.NUMBER:
                 normalize_numeric_literal(node, self.allow_underscores)
             if node.type not in WHITESPACE:
@@ -2500,7 +2514,7 @@ def normalize_string_prefix(leaf: Leaf, remove_u_prefix: bool = False) -> None:
     leaf.value = f"{new_prefix}{match.group(2)}"
 
 
-def normalize_string_quotes(leaf: Leaf) -> None:
+def normalize_string_quotes(leaf: Leaf, single_quote: bool = False) -> None:
     """Prefer double quotes but only if it doesn't cause more escaping.
 
     Adds or removes backslashes as appropriate. Doesn't parse and fix
@@ -2509,18 +2523,28 @@ def normalize_string_quotes(leaf: Leaf) -> None:
     Note: Mutates its argument.
     """
     value = leaf.value.lstrip("furbFURB")
-    if value[:3] == '"""':
+
+    quote_char = '"'
+    alt_quote_char = "'"
+    triple_quote_chars = '"""'
+    alt_triple_quote_chars = "'''"
+
+    if single_quote:
+        quote_char = "'"
+        alt_quote_char = '"'
+
+    if value[:3] == triple_quote_chars:
         return
 
-    elif value[:3] == "'''":
-        orig_quote = "'''"
-        new_quote = '"""'
-    elif value[0] == '"':
-        orig_quote = '"'
-        new_quote = "'"
+    elif value[:3] == alt_triple_quote_chars:
+        orig_quote = alt_triple_quote_chars
+        new_quote = triple_quote_chars
+    elif value[0] == quote_char:
+        orig_quote = quote_char
+        new_quote = alt_quote_char
     else:
-        orig_quote = "'"
-        new_quote = '"'
+        orig_quote = alt_quote_char
+        new_quote = quote_char
     first_quote_pos = leaf.value.find(orig_quote)
     if first_quote_pos == -1:
         return  # There's an internal error
@@ -2553,16 +2577,16 @@ def normalize_string_quotes(leaf: Leaf) -> None:
             if "\\" in str(m):
                 # Do not introduce backslashes in interpolated expressions
                 return
-    if new_quote == '"""' and new_body[-1:] == '"':
+    if new_quote == triple_quote_chars and new_body[-1] == triple_quote_chars[0]:
         # edge case:
-        new_body = new_body[:-1] + '\\"'
+        new_body = new_body[:-1] + "\\" + triple_quote_chars[0]
     orig_escape_count = body.count("\\")
     new_escape_count = new_body.count("\\")
     if new_escape_count > orig_escape_count:
         return  # Do not introduce more escaping
 
-    if new_escape_count == orig_escape_count and orig_quote == '"':
-        return  # Prefer double quotes
+    if new_escape_count == orig_escape_count and orig_quote == quote_char:
+        return
 
     leaf.value = f"{prefix}{new_quote}{new_body}{new_quote}"
 
